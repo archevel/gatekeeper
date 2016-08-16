@@ -46,6 +46,9 @@ function gatekeeper_mnemonic {
         cat <<EOF
 Usage: $GK_COMMAND <mnemonic> 
        $GK_COMMAND mnemonic <mnemonic>
+
+The second form needs to be used if <mnemonic> is one of the possible 
+gatekeeper sub commands (e.g. init, ls, set, mnemonic).
 EOF
         exit 2
     fi
@@ -146,8 +149,3 @@ else
     gatekeeper_mnemonic "$@"
     
 fi
-
-
-# del <mnemonic> - removes an entry from encrypted file
-
-
