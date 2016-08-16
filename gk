@@ -14,7 +14,6 @@ fi
 
 # creates a encrypted file in the settings location
 function gatekeeper_init {
-    
     mkdir -p $GK_HOME
     GK_PASSFILE="$GK_HOME/passfile"
     echo "Where to store passwords (if empty will use default: $GK_PASSFILE)"
@@ -30,7 +29,7 @@ function gatekeeper_init {
 
     echo "GK_PASSFILE=$GK_PASSFILE" > $GK_CONF
 
-    cat | $GK_GPG_COMMAND -c --output $GK_PASSFILE -  <<EOF 
+    cat | $GK_GPG_COMMAND -c --output $GK_PASSFILE -  <<EOF
 # GK_PASSFILE version 0.0.1
 # With format:
 #  <mnemonic>US<username>US<password>
@@ -44,25 +43,25 @@ EOF
 function gatekeeper_mnemonic {
     if [[ -z $1 ]]; then
         cat <<EOF
-Usage: $GK_COMMAND <mnemonic> 
+Usage: $GK_COMMAND <mnemonic>
        $GK_COMMAND mnemonic <mnemonic>
 
-The second form needs to be used if <mnemonic> is one of the possible 
+The second form needs to be used if <mnemonic> is one of the possible
 gatekeeper sub commands (e.g. init, ls, set, mnemonic).
 EOF
         exit 2
     fi
 
-    
+
     local GK_ENTRY=`$GK_GPG_COMMAND --decrypt $GK_PASSFILE | grep -e "^$1$GK_IFS"`
     local oIFS=$IFS
-    IFS=$GK_IFS   
-    read GK_mnemonic GK_username GK_pass <<< "$GK_ENTRY"
+    IFS=$GK_IFS
+    read GK_MNEMONIC GK_USERNAME GK_PASS <<< "$GK_ENTRY"
     IFS=$oIFS
 
-    xclip -selection clipboard <<< $GK_pass
+    xclip -selection clipboard <<< $GK_PASS
 
-    echo -e "Username for mneonic '$GK_mnemonic' is: $GK_username"
+    echo -e "Username for mneonic '$GK_MNEMONIC' is: $GK_USERNAME"
     echo "Password is in clipboard"
 }
 
@@ -101,7 +100,7 @@ EOF
     fi
 
     GK_CONTENTS=`grep -s -v "^$1$GK_IFS" <<< "$GK_CONTENTS"`
-    
+
     $GK_GPG_COMMAND --yes --passphrase "$GK_MASTERPASS" -c --output $GK_PASSFILE <(
         echo "$GK_CONTENTS"
         echo "$1$GK_IFS$2$GK_IFS$GK_PASS"
@@ -120,7 +119,7 @@ function gatekeeper_ls {
         echo "Mnemonic${GK_IFS}User"
         grep "$GK_IFS" <<< "$GK_CONTENTS" | cut -d$nIFS -f1-2
     ) | column -t -s"$GK_IFS"
-    
+
 }
 
 
@@ -165,5 +164,5 @@ else
     fi
 
     gatekeeper_mnemonic "$@"
-    
+
 fi
