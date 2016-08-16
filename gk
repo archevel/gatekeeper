@@ -1,0 +1,153 @@
+#!/bin/bash
+
+
+# A simple bash script for managing passwords securely with gpg
+GK_HOME="$HOME/.gatekeeper"
+GK_CONF="$GK_HOME/gatekeeper.conf"
+GK_IFS=`echo -n -e '\037'`
+
+GK_GPG_COMMAND="gpg --no-use-agent --logger-file $GK_HOME/gatekeeper.log"
+
+if [[ -f $GK_CONF ]]; then
+    source $GK_CONF
+fi
+
+# init - creates a encrypted file in the settings location
+function gatekeeper_init {
+    
+    mkdir -p $GK_HOME
+    GK_PASSFILE="$GK_HOME/passfile"
+    echo "Where to store passwords (if empty will use default: $GK_PASSFILE)"
+    read a_path
+    if [[ -n $a_path ]]; then
+        GK_PASSFILE=$a_path
+    fi
+
+    if [[ -f $GK_PASSFILE ]]; then
+        echo "$GK_PASSFILE already exists!"
+        exit 1
+    fi
+
+    echo "GK_PASSFILE=$GK_PASSFILE" > $GK_CONF
+
+    cat | $GK_GPG_COMMAND -c --output $GK_PASSFILE -  <<EOF 
+# GK_PASSFILE version 0.0.1
+# With format:
+#  <mnemonic>US<username>US<password>
+# where US denotes the unit-separator ascii character: \037
+
+EOF
+     exit 0
+}
+
+# <mnemonic> - prints out user for the mnemonic and puts the password in the clipboard
+function gatekeeper_mnemonic {
+    if [[ -z $1 ]]; then
+        cat <<EOF
+Usage: $GK_COMMAND <mnemonic> 
+       $GK_COMMAND mnemonic <mnemonic>
+EOF
+        exit 2
+    fi
+
+    
+    local GK_ENTRY=`$GK_GPG_COMMAND --decrypt $GK_PASSFILE | grep -e "^$1$GK_IFS"`
+    local oIFS=$IFS
+    IFS=$GK_IFS   
+    read GK_mnemonic GK_username GK_pass <<< "$GK_ENTRY"
+    IFS=$oIFS
+
+    xclip -selection clipboard <<< $GK_pass
+
+    echo -e "Username for mneonic '$GK_mnemonic' is: $GK_username"
+    echo "Password is in clipboard"
+}
+
+# set <mnemonic> <user> [password] - appends an entry to encrypted file and prints password (generated if not supplied).
+# <user> should not contain 
+function gatekeeper_set {
+    local A_PASS=`pwgen -s -c -n -y -N 1 16`
+    if [[ $# -lt 2 ]]; then
+        cat <<EOF
+Usage: $GK_COMMAND set <mnemonic> <user> [password]
+EOF
+        exit 2
+    fi
+    if [[ $# -eq 3 ]]; then
+        A_PASS=$3
+    fi
+
+    echo "Enter master password:"
+    read -s GK_MASTERPASS
+
+    local GK_CONTENTS=`$GK_GPG_COMMAND --passphrase "$GK_MASTERPASS" --decrypt $GK_PASSFILE`
+    grep -q -s "^$1$GK_IFS" <<< "$GK_CONTENTS"
+    if [[ $? -eq 0 ]]; then
+        while true; do
+            echo "Mnemonic already in use. Overwrite (y/n)?"
+            read yn
+
+            if [[ "$yn" = "y" ]]; then
+                break;
+            elif [[ "$yn" = "n" ]]; then
+                exit 0
+            fi
+        done
+    fi
+
+    GK_CONTENTS=`grep -s -v "^$1$GK_IFS" <<< "$GK_CONTENTS"`
+    
+    $GK_GPG_COMMAND --yes --passphrase "$GK_MASTERPASS" -c --output $GK_PASSFILE <(
+        echo "$GK_CONTENTS"
+        echo "$1$GK_IFS$2$GK_IFS$A_PASS"
+    )
+}
+
+function gatekeeper_ls {
+    echo "Enter master password:"
+    read -s GK_MASTERPASS
+
+    local GK_CONTENTS=`$GK_GPG_COMMAND --passphrase "$GK_MASTERPASS" --decrypt $GK_PASSFILE`
+
+    (
+        echo "Mnemonic${GK_IFS}User"
+        grep "$GK_IFS" <<< "$GK_CONTENTS" | cut -d$nIFS -f1-2
+    ) | column -t -s"$GK_IFS"
+    
+}
+
+
+function gatekeeper_usage {
+    cat <<EOF
+Usage: $GK_COMMAND <mnemonic>
+       $GK_COMMAND <command> [args]
+
+Providing a mnemonic puts the associated password into the clipboard and
+prints the user info provided when the mnemonic was set.
+
+See $0 help <command> for help about specific command
+EOF
+}
+
+GK_COMMAND=$(basename $0)
+SUB_COMMAND="$1"
+COMMAND_FUNC="gatekeeper_$SUB_COMMAND"
+
+if [[ $(type -t "$COMMAND_FUNC") = function ]]; then
+    shift
+
+    $COMMAND_FUNC $@
+else
+    if [[ -z $1 ]]; then
+        gatekeeper_usage
+        exit 2
+    fi
+
+    gatekeeper_mnemonic "$@"
+    
+fi
+
+
+# del <mnemonic> - removes an entry from encrypted file
+
+
